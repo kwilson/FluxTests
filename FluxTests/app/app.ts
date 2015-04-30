@@ -1,10 +1,7 @@
-﻿/// <reference path="../scripts/typings/wolfy87-eventemitter/wolfy87-eventemitter.d.ts" />
-/// <reference path="../scripts/typings/react/react-global.d.ts" />
+﻿/// <reference path="app-dispatcher.ts" />
 
 module FluxTests {
     export class FluxTestsApp extends Marionette.Application {
-
-        static dispatcher = new Dispatcher();
 
         constructor() {
             super();
@@ -18,9 +15,15 @@ module FluxTests {
             // Create the React element
             var reactOutput = ComponentFactory.getTextView();
 
-            React.render(
-                React.createElement(reactOutput, null),
-                document.getElementById('output-region-2'));
+            var hookUpRender = (elementId: string) => {
+                React.render(
+                    React.createElement(reactOutput, null),
+                    document.getElementById(elementId));
+            };
+
+            [2].map(i => {
+                hookUpRender('output-region-' + i);
+            });
         }
     }
 
@@ -29,10 +32,12 @@ module FluxTests {
         static getTextView() {
             var textStore = new TextModelFluxStore();
 
+            var getTextValue = () => textStore.getValue();
+
             return React.createClass({
                 displayName: "TextView",
                 getInitialState() {
-                    return { text: textStore.getValue() };
+                    return { text: getTextValue() };
                 },
                 componentDidMount() {
                     textStore.addChangeListener(this._onChange);
@@ -46,7 +51,7 @@ module FluxTests {
                         );
                 },
                 _onChange() {
-                    this.setState({ text: textStore.getValue() });
+                    this.setState({ text: getTextValue() });
                 }
             });
         }
@@ -55,18 +60,22 @@ module FluxTests {
     // This just simulates some round trip to the server with a 2 second delay. It also appends a date.
     export class TextProcessor {
         constructor() {
-            FluxTestsApp.dispatcher.register(this._processEvent.bind(this));
+            AppDispatcher.register(this._processEvent.bind(this));
         }
 
-        private _processEvent(evt: EventType, data?: any) {
-            switch (evt) {
-                case EventType.ItemSubmitted:
-                    var value = data;
-                    setTimeout(() => {
-                        FluxTestsApp.dispatcher.dispatch(EventType.ItemAdded, value + ' : ' + new Date());
-                    }, 2000);
+        private _processEvent(payload: IPayload) {
+            switch (payload.actionType) {
+            case ActionTypeConstant.itemSubmitted:
+                setTimeout(() => {
+                    var value = payload['text'] + ' : ' + new Date();
 
-                    return;
+                    AppDispatcher.handleViewAction({
+                        actionType: ActionTypeConstant.itemAdded,
+                        text: value
+                    });
+                }, 1);
+
+                return;
             }
         }
     }
@@ -79,8 +88,9 @@ module FluxTests {
         private emitter: Wolfy87EventEmitter.EventEmitter;
 
         constructor() {
+            this.model = '';
             this.emitter = new EventEmitter();
-            FluxTestsApp.dispatcher.register(this._processEvent.bind(this));
+            AppDispatcher.register(this._processEvent.bind(this));
         }
 
         getValue(): string {
@@ -99,15 +109,15 @@ module FluxTests {
             this.emitter.emit(TextModelFluxStore.CHANGE_EVENT);
         }
 
-        private _processEvent(evt: EventType, data?: string) {
-            switch (evt) {
-                case EventType.ItemSubmitted:
+        private _processEvent(payload: IPayload) {
+            switch (payload.actionType) {
+                case ActionTypeConstant.itemSubmitted:
                     this.model = '';
                     this.emitChange();
                     return;
 
-                case EventType.ItemAdded:
-                    this.model = data;
+                case ActionTypeConstant.itemAdded:
+                    this.model = payload['text'];
                     this.emitChange();
                     return;
             }
@@ -149,7 +159,12 @@ module FluxTests {
 
             var inputEl = this.$('input');
             var value = inputEl.val();
-            FluxTestsApp.dispatcher.dispatch(EventType.ItemSubmitted, value);
+
+            AppDispatcher.handleViewAction({
+                actionType: ActionTypeConstant.itemSubmitted,
+                text: value
+            }); //FluxTestsApp.dispatcher.dispatch(EventType.ItemSubmitted, value);
+
             inputEl.val('');
         }
     }
@@ -167,17 +182,17 @@ module FluxTests {
         }
 
         initialize() {
-            FluxTestsApp.dispatcher.register(this._processEvent.bind(this));
+            AppDispatcher.register(this._processEvent.bind(this));
         }
 
-        private _processEvent(evt: EventType, data?: any) {
-            switch (evt) {
-                case EventType.ItemAdded:
-                    this.text = data;
+        private _processEvent(payload: IPayload) {
+            switch (payload.actionType) {
+                case ActionTypeConstant.itemAdded:
+                    this.text = payload['text'];
                     this.trigger('change');
                     return;
 
-                case EventType.ItemSubmitted:
+                case ActionTypeConstant.itemSubmitted:
                     this.text = '';
                     this.trigger('change');
                     return;
